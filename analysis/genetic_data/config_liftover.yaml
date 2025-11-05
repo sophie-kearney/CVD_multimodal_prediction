@@ -1,0 +1,10 @@
+from_build: '19'
+to_build: '38'
+
+input_info:
+  CVD: # give the file a nickname
+    file_in: 'GCST90086057_buildGRCh37.tsv.gz'
+    chrCol: '1'
+    posCol: '2'
+    has_header: True
+    keep_failed_rows: False
