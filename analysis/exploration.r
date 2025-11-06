@@ -117,5 +117,30 @@ df[, has_CVD := condition_code %in% cvd_ids]
 result <- df[, .(any_CVD = any(has_CVD)), by = patient_id]
 num_with_CVD <- sum(result$any_CVD)
 
+# -----
+
+encounters <- read.csv("/Users/sophiekk/projects/CIS5200_final/coherent-11-07-2022/csv/encounters.csv")
+observations <- read.csv("/Users/sophiekk/projects/CIS5200_final/coherent-11-07-2022/csv/observations.csv")
+
+View(as.data.frame(unique(observations$DESCRIPTION)))
+View(as.data.frame(unique(encounters$DESCRIPTION)))
+
+nrow(encounters)
+nrow(observations)
+
+encounters %>%
+  group_by(PATIENT) %>%
+  summarise(num_encounters = n()) %>%
+  summarise(mean_encounters = mean(num_encounters),
+            median_encounters = median(num_encounters),
+            max_encounters = max(num_encounters))
+
+
+observations %>%
+  group_by(PATIENT) %>%
+  summarise(num_observations = n()) %>%
+  summarise(mean_observations = mean(num_observations),
+            median_observations = median(num_observations),
+            max_observations= max(num_observations))
 
 
