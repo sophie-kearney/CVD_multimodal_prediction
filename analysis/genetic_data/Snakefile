@@ -59,8 +59,7 @@ rule make_genotype_matrix:
         expanded = construct_snp_id_from_df(df) 
         unique_snps = expanded['SNP_ID'].unique().tolist() # get unique SNP_ID values to use as columns in genotype matrix
         print(f"Unique SNPs count: {len(unique_snps)}")
-        # cols = ['PATIENT_ID'] + unique_snps
-        genotype_matrix = pd.DataFrame(columns = ['PATIENT_ID'] + unique_snps)
+        genotype_matrix = pd.DataFrame(columns = unique_snps)
 
         unique_snps_df = pd.DataFrame(unique_snps, columns=['SNP_ID'])
         unique_snps_df.to_csv(output.unique_snps, index=False) # will be used to filter PRS weights in a different script
@@ -74,9 +73,16 @@ rule make_genotype_matrix:
 
             patient_data = construct_snp_id_from_df(patient_data)
             dosage = patient_data.groupby('SNP_ID')['VARIANT'].sum().astype(int) # two rows per allele copy, so to get genotype dosage, we need to group by INDEX_PREFIX and sum VARIANT (which is 'true'/'false')
-            genotype_matrix.loc[patient_id] = dosage # use this dosage series to create a row in the genotype matrix
 
-        genotype_matrix.to_csv(output.genotype_matrix, index=True) # rows are patient IDs, columns are SNP_IDs
+            row = pd.DataFrame([dosage], columns=unique_snps)
+            row.insert(0, 'PATIENT_ID', patient_id)  # add as first column
+            genotype_matrix = pd.concat([genotype_matrix, row], ignore_index=True)
+    
+            # genotype_matrix.loc[patient_id] = dosage # use this dosage series to create a row in the genotype matrix
+
+        cols = ['PATIENT_ID'] + sorted(unique_snps) # stable column ordering
+        genotype_matrix = genotype_matrix.reindex(columns=cols)
+        genotype_matrix.to_csv(output.genotype_matrix, index=False) # rows are patient IDs, columns are SNP_IDs
 
 rule make_prs_weights:
     input:
