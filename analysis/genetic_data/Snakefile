@@ -72,7 +72,7 @@ rule make_genotype_matrix:
             patient_id = file.split('_')[2] # using anonymized patient ID. [0] Abe604, [1] Frami345, [2] b8dd1798-beef-094d-1be4-f90ee0e6b7d5
 
             patient_data = construct_snp_id_from_df(patient_data)
-            dosage = patient_data.groupby('SNP_ID')['VARIANT'].sum().astype(int) # two rows per allele copy, so to get genotype dosage, we need to group by INDEX_PREFIX and sum VARIANT (which is 'true'/'false')
+            dosage = patient_data.groupby('SNP_ID')['HAS_VARIANT'].sum().astype(int) # two rows per allele copy, so to get genotype dosage, we need to group by INDEX_PREFIX and sum HAS_VARIANT (which is 'true'/'false')
 
             row = pd.DataFrame([dosage], columns=unique_snps)
             row.insert(0, 'PATIENT_ID', patient_id)  # add as first column
@@ -80,8 +80,12 @@ rule make_genotype_matrix:
     
             # genotype_matrix.loc[patient_id] = dosage # use this dosage series to create a row in the genotype matrix
 
-        cols = ['PATIENT_ID'] + sorted(unique_snps) # stable column ordering
+        cols = ['PATIENT_ID'] + sorted(unique_snps) # stable column ordering, should be fine though 
         genotype_matrix = genotype_matrix.reindex(columns=cols)
+
+        # delete columns for which sum is 0 (i.e. SNPs not present in any patient)
+        genotype_matrix = genotype_matrix.loc[:, (genotype_matrix.sum(axis=1) != 0)]
+    
         genotype_matrix.to_csv(output.genotype_matrix, index=False) # rows are patient IDs, columns are SNP_IDs
 
 rule make_prs_weights:
