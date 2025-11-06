@@ -1,0 +1,103 @@
+import pandas as pd 
+import os
+
+# snakemake -c1 --use-envmodules all
+
+rule all:
+    input:
+        'genotype_matrix.csv',
+        'unique_snps.csv',
+        'filtered_prs_weights.csv'
+
+rule make_genotype_matrix:
+    input:
+        genetic_data_dir = '/Users/ananyara/Github/CVD_multimodal_prediction/coherent-11-07-2022/dna',  # folder to iterate through all genetic data files
+        columns_data_file = '/Users/ananyara/Github/CVD_multimodal_prediction/coherent-11-07-2022/dna/Abe604_Frami345_b8dd1798-beef-094d-1be4-f90ee0e6b7d5_dna.csv' # get all columns by reading just one file first
+    output:
+        genotype_matrix = 'genotype_matrix.csv',
+        unique_snps = 'unique_snps.csv'
+    run:
+        df = pd.read_csv(input.columns_data_file, sep=',')
+
+        def construct_snp_id_from_df(df):
+            # the below logic is from chatgpt, in order to construct SNP_IDs for each allele row, accounting for multiple alternate alleles per original row
+            # 1️⃣ Normalize variant allele list
+            df = df.assign(
+                VARIANT_ALLELE_LIST=df['VARIANT_ALLELE_LIST']
+                    .astype(str)
+                    .str.replace('"', '', regex=False)
+                    .str.split(',')  # split into lists
+            )
+
+            # 2️⃣ Explode to one allele per row
+            expanded = df.explode('VARIANT_ALLELE_LIST', ignore_index=True)
+            expanded['VARIANT_ALLELE_LIST'] = expanded['VARIANT_ALLELE_LIST'].str.strip()
+
+            # 3️⃣ Normalize allele column (handle "ref>alt" form)
+            expanded['OBSERVED_ALLELE'] = expanded['ALLELE'].astype(str).str.extract(r'>([A-Za-z])$')
+            expanded['OBSERVED_ALLELE'] = expanded['OBSERVED_ALLELE'].fillna(expanded['ALLELE'].str.strip())
+
+            # 4️⃣ Make VARIANT boolean
+            expanded['VARIANT'] = expanded['VARIANT'].astype(str).str.lower().isin(['true', '1', 't', 'yes'])
+
+            # 5️⃣ Construct SNP_ID
+            expanded['SNP_ID'] = (
+                expanded['CHROMOSOME'].astype(str)
+                + '_' + expanded['LOCATION'].astype(str)
+                + '_' + expanded['ANCESTRAL_ALLELE'].astype(str)
+                + '_' + expanded['VARIANT_ALLELE_LIST'].astype(str)
+            )
+
+            # 6️⃣ Compute HAS_VARIANT
+            expanded['HAS_VARIANT'] = (
+                (expanded['VARIANT_ALLELE_LIST'] == expanded['OBSERVED_ALLELE']) &
+                expanded['VARIANT']
+            )
+
+            return expanded
+
+        expanded = construct_snp_id_from_df(df) 
+        unique_snps = expanded['SNP_ID'].unique().tolist() # get unique SNP_ID values to use as columns in genotype matrix
+        print(f"Unique SNPs count: {len(unique_snps)}")
+        # cols = ['PATIENT_ID'] + unique_snps
+        genotype_matrix = pd.DataFrame(columns = ['PATIENT_ID'] + unique_snps)
+
+        unique_snps_df = pd.DataFrame(unique_snps, columns=['SNP_ID'])
+        unique_snps_df.to_csv(output.unique_snps, index=False) # will be used to filter PRS weights in a different script
+
+        # iterate through each patient file, construct SNP_IDs, compute genotype dosage per SNP, and add as a row in the genotype matrix
+        for file in os.listdir(input.genetic_data_dir):
+            file_path = os.path.join(input.genetic_data_dir, file)
+            patient_data = pd.read_csv(file_path, sep=',')
+            print(f"Processing file: {file}, shape: {df.shape}")
+            patient_id = file.split('_')[2] # using anonymized patient ID. [0] Abe604, [1] Frami345, [2] b8dd1798-beef-094d-1be4-f90ee0e6b7d5
+
+            patient_data = construct_snp_id_from_df(patient_data)
+            dosage = patient_data.groupby('SNP_ID')['VARIANT'].sum().astype(int) # two rows per allele copy, so to get genotype dosage, we need to group by INDEX_PREFIX and sum VARIANT (which is 'true'/'false')
+            genotype_matrix.loc[patient_id] = dosage # use this dosage series to create a row in the genotype matrix
+
+        genotype_matrix.to_csv(output.genotype_matrix, index=True) # rows are patient IDs, columns are SNP_IDs
+
+rule make_prs_weights:
+    input:
+        unique_snps = 'unique_snps.csv',
+        sumstats_file = 'GCST90086057.liftover.tsv' # full sumstats file
+    output:
+        filtered_prs_weights = 'filtered_prs_weights.csv'
+    run:
+        unique_snps_df = pd.read_csv(input.unique_snps)
+        sumstats_df = pd.read_csv(input.sumstats_file, sep='\t')
+        sumstats_df['SNP_ID'] = (
+            sumstats_df['chromosome'].astype(str)
+            + '_' + sumstats_df['base_pair_location'].astype(str)
+            + '_' + sumstats_df['other_allele'].astype(str)
+            + '_' + sumstats_df['effect_allele'].astype(str))
+
+        # join sumstats_df on unique_snps so that it only includes SNP_IDs in unique_snps_df
+        # filtered_prs_weights_df = sumstats_df[sumstats_df['SNP_ID'].isin(unique_snps_df['SNP_ID'])]
+        filtered_prs_weights_df = pd.merge(unique_snps_df, sumstats_df, on='SNP_ID', how='left')
+
+        filtered_prs_weights_df.to_csv(output.filtered_prs_weights, index=False, columns=['SNP_ID', 'chromosome', 'base_pair_location', 'other_allele', 'effect_allele', 'beta', 'p_value'])
+
+# rule calculate_prs:
+#     pass

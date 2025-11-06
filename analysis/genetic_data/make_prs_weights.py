@@ -1,1 +1,0 @@
-# slim down the liftover sumstats file to just have the columns we need for PRS weights, and only the rows (SNPs) for which we have genotype data 
