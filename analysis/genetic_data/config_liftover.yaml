@@ -1,5 +1,5 @@
-from_build: '19'
-to_build: '38'
+from_build: '19' # going from GRCh37/hg19
+to_build: '38' # to GRCh38/hg38 (matches the format used in coherent data set so we can match up SNPs with effect sizes)
 
 input_info:
   GCST90086057: # give the file a nickname
@@ -15,4 +15,4 @@ input_info:
 #   --directory /project/ssverma_shared/tools/lindsay_snakemake_workflows/liftover_wrapper \
 #   --configfile /project/ssverma_shared/projects/Ananya_CIS5200_CVD_Pred/config_liftover.yaml \
 #   --cores 1 \
-#   GCST90086057.liftover.tsv.gz
+#   /project/ssverma_shared/projects/Ananya_CIS5200_CVD_Pred/GCST90086057.liftover.tsv.gz
