@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import numpy as np
 
+# to run this file:
 # snakemake -c1 --use-envmodules all
 
 rule all:
