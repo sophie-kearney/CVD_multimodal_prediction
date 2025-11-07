@@ -1,13 +1,15 @@
 import pandas as pd 
 import os
+import numpy as np
 
 # snakemake -c1 --use-envmodules all
 
 rule all:
     input:
-        'genotype_matrix.csv',
-        'unique_snps.csv',
-        'filtered_prs_weights.csv'
+        # 'genotype_matrix.csv',
+        # 'unique_snps.csv',
+        # 'filtered_prs_weights.csv'
+        'prs_scores.csv'
 
 rule make_genotype_matrix:
     input:
@@ -82,32 +84,74 @@ rule make_genotype_matrix:
 
         cols = ['PATIENT_ID'] + sorted(unique_snps) # stable column ordering, should be fine though 
         genotype_matrix = genotype_matrix.reindex(columns=cols)
-
-        # delete columns for which sum is 0 (i.e. SNPs not present in any patient)
-        genotype_matrix = genotype_matrix.loc[:, (genotype_matrix.sum(axis=1) != 0)]
     
         genotype_matrix.to_csv(output.genotype_matrix, index=False) # rows are patient IDs, columns are SNP_IDs
 
 rule make_prs_weights:
     input:
         unique_snps = 'unique_snps.csv',
-        sumstats_file = 'GCST90086057.liftover.tsv' # full sumstats file
+        # sumstats_file = 'GCST90086057.liftover.tsv' # full sumstats file
+        # sumstats_file = 'ukbb.tsv'
+        # sumstats_file = 'anurag.tsv'
+        sumstats_file = 'GCST90038595.liftover.tsv'
     output:
         filtered_prs_weights = 'filtered_prs_weights.csv'
     run:
         unique_snps_df = pd.read_csv(input.unique_snps)
         sumstats_df = pd.read_csv(input.sumstats_file, sep='\t')
+        sumstats_df['base_pair_location'] = sumstats_df['base_pair_location'].astype(str).str.split('.').str[0]
         sumstats_df['SNP_ID'] = (
             sumstats_df['chromosome'].astype(str)
             + '_' + sumstats_df['base_pair_location'].astype(str)
-            + '_' + sumstats_df['other_allele'].astype(str)
-            + '_' + sumstats_df['effect_allele'].astype(str))
+            + '_' + sumstats_df['effect_allele'].astype(str)
+            + '_' + sumstats_df['other_allele'].astype(str))
 
         # join sumstats_df on unique_snps so that it only includes SNP_IDs in unique_snps_df
-        # filtered_prs_weights_df = sumstats_df[sumstats_df['SNP_ID'].isin(unique_snps_df['SNP_ID'])]
         filtered_prs_weights_df = pd.merge(unique_snps_df, sumstats_df, on='SNP_ID', how='left')
+        # filtered_prs_weights_df['beta'] = np.log(filtered_prs_weights_df['odds_ratio'])
 
         filtered_prs_weights_df.to_csv(output.filtered_prs_weights, index=False, columns=['SNP_ID', 'chromosome', 'base_pair_location', 'other_allele', 'effect_allele', 'beta', 'p_value'])
 
-# rule calculate_prs:
-#     pass
+rule calculate_prs:
+    input:
+        genotype_matrix = 'genotype_matrix.csv',
+        prs_weights = 'filtered_prs_weights.csv'
+    output:
+        prs_scores = 'prs_scores.csv'
+    run:
+        PVAL_THRESHOLD_1 = 0.05  # only include SNPs with p-value below this threshold
+        PVAL_THRESHOLD_2 = 1 * 10**-5
+        PVAL_THRESHOLD_3 = 5 * 10**-8
+
+        genotype_matrix = pd.read_csv(input.genotype_matrix)
+        prs_weights = pd.read_csv(input.prs_weights)
+
+        # set SNP_ID as index for easy lookup
+        prs_weights.set_index('SNP_ID', inplace=True)
+
+        prs_scores = []
+
+        for index, row in genotype_matrix.iterrows():
+            patient_id = row['PATIENT_ID']
+            genotype_dosage = row.drop('PATIENT_ID')
+
+            # calculate PRS as sum of (dosage * beta) for each SNP
+            prs_1, prs_2, prs_3 = 0.0, 0.0, 0.0
+            for snp_id, dosage in genotype_dosage.items():
+                if snp_id in prs_weights.index:
+                    beta = prs_weights.at[snp_id, 'beta']
+
+                    if prs_weights.at[snp_id, 'p_value'] <= PVAL_THRESHOLD_1:
+                        # only include SNPs below p-value threshold
+                        prs_1 += dosage * beta
+                    
+                    if prs_weights.at[snp_id, 'p_value'] <= PVAL_THRESHOLD_2:
+                        prs_2 += dosage * beta
+                    
+                    if prs_weights.at[snp_id, 'p_value'] <= PVAL_THRESHOLD_3:
+                        prs_3 += dosage * beta
+
+            prs_scores.append({'PATIENT_ID': patient_id, 'PRS_0.05': prs_1, 'PRS_1e-5': prs_2, 'PRS_5e-8': prs_3})
+
+        prs_scores_df = pd.DataFrame(prs_scores)
+        prs_scores_df.to_csv(output.prs_scores, index=False)

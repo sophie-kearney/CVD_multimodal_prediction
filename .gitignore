@@ -4,6 +4,7 @@ coherent-11-07-2022/
 .idea/
 ~$*.pptx
 *.tsv
+*.gz
 *.log
 *.csv
 analysis/genetic_data/.snakemake
