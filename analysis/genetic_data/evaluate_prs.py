@@ -22,6 +22,8 @@ prs_with_age_sex = pd.merge(scores, merged[['Id', 'PRS_AGE', 'GENDER']], left_on
 prs_with_status = pd.merge(prs_with_age_sex, case_control_status[['PATIENT', 'CVD']], left_on='PATIENT_ID', right_on='PATIENT', how='left')
 prs_with_status['GENDER'] = prs_with_status['GENDER'].map({'M': 1, 'F': 0}) # one hot encoding for gender
 
+prs_with_status.to_csv('prs_with_status.csv', index=False, columns=['PATIENT_ID', 'PRS_0.05', 'PRS_1e-5', 'PRS_5e-8', 'PRS_AGE', 'GENDER', 'CVD'])
+
 # now evaluate prs performance
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score, average_precision_score
 from sklearn.linear_model import LogisticRegression
