@@ -137,11 +137,15 @@ rule calculate_prs:
             genotype_dosage = row.drop('PATIENT_ID')
 
             # calculate PRS as sum of (dosage * beta) for each SNP
-            prs_1, prs_2, prs_3 = 0.0, 0.0, 0.0
+            prs_1, prs_2, prs_3, prs_all = 0.0, 0.0, 0.0, 0.0
+            # count = 0
             for snp_id, dosage in genotype_dosage.items():
                 if snp_id in prs_weights.index:
                     beta = prs_weights.at[snp_id, 'beta']
 
+                    if not pd.isna(beta): # including all SNPs with non-missing beta
+                        prs_all += dosage * beta  # include all SNPs regardless of p-value
+                        # count += 1
                     if prs_weights.at[snp_id, 'p_value'] <= PVAL_THRESHOLD_1:
                         # only include SNPs below p-value threshold
                         prs_1 += dosage * beta
@@ -152,7 +156,9 @@ rule calculate_prs:
                     if prs_weights.at[snp_id, 'p_value'] <= PVAL_THRESHOLD_3:
                         prs_3 += dosage * beta
 
-            prs_scores.append({'PATIENT_ID': patient_id, 'PRS_0.05': prs_1, 'PRS_1e-5': prs_2, 'PRS_5e-8': prs_3})
+            # print(f"Patient {patient_id}: PRS_0.05={prs_1}, PRS_1e-5={prs_2}, PRS_5e-8={prs_3}, PRS_all={prs_all}")
+            prs_scores.append({'PATIENT_ID': patient_id, 'PRS_0.05': prs_1, 'PRS_1e-5': prs_2, 'PRS_5e-8': prs_3, 'PRS_all': prs_all})
+            # print(count)
 
         prs_scores_df = pd.DataFrame(prs_scores)
         prs_scores_df.to_csv(output.prs_scores, index=False)
