@@ -22,7 +22,7 @@ def run_rf(filepath, target_column='CVD', n_estimators=500, random_state=42, max
 
     # 10-fold cross-validation
     kf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
-    results = cross_validate(model, X, y, cv=kf, scoring=scoring, return_train_score=False)
+    results = cross_validate(model, X_train, y_train, cv=kf, scoring=scoring, return_train_score=False)
     print("Cross-validation results:")
     metrics = {}
     for metric_name in scoring:
@@ -71,7 +71,9 @@ for i, metric in enumerate(metric_names):
     errors = [all_metrics[m][metric][1] for m in model_labels]  # std deviations
 
     ax = axes[i]
-    ax.bar(model_labels, values, yerr=errors, capsize=5, alpha=0.8)
+    bars = ax.bar(model_labels, values, yerr=errors, capsize=5, alpha=0.8)
+    # add actual values above bars
+    ax.bar_label(bars, fmt='%.2f', padding=3)
     ax.set_title(metric)
     ax.set_ylim(0, 1)
     ax.set_ylabel("Score")
