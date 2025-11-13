@@ -8,3 +8,4 @@ coherent-11-07-2022/
 *.log
 *.csv
 analysis/genetic_data/.snakemake
+*.png

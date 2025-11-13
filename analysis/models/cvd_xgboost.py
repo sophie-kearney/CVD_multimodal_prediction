@@ -3,6 +3,8 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, auc, roc_curve, precision_recall_curve
 
+# need to add 10 fold cv, optuna, and saving metrics like in rf file
+
 def load_xgboost_model(filepath, target_column = 'CVD', n_estimators=500, random_state=42, max_depth=100):
 
     # load data
