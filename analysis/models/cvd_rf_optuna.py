@@ -44,9 +44,9 @@ def run_rf(best_params, x_train, y_train, x_test, y_test, random_state=42):
     metrics['f1'] = f1_score(y_test, y_pred)
     metrics['precision'] = precision_score(y_test, y_pred)
     metrics['recall'] = recall_score(y_test, y_pred)
-    y_score = model.predict_proba(x_test)
-    metrics['roc_auc'] = roc_auc_score(y_test, y_score)
-    metrics['average_precision'] = average_precision_score(y_test, y_score)
+    y_pred_proba = model.predict_proba(x_test)[:, 1] # Probabilities for the positive class (class 1)
+    metrics['roc_auc'] = roc_auc_score(y_test, y_pred_proba)
+    metrics['average_precision'] = average_precision_score(y_test, y_pred_proba)
     
     return metrics
 
@@ -72,7 +72,7 @@ for file in files:
     best_params = run_hyperparameter_tuning(x_train, y_train)
     print(f"Best params for {data_type}: {best_params}")
 
-    metrics = run_rf(best_params, x_test, y_test)
+    metrics = run_rf(best_params, x_train, y_train, x_test, y_test)
     all_metrics[data_type] = {
         'AUC-ROC': metrics['roc_auc'],
         'AUC-PRC': metrics['average_precision'],
