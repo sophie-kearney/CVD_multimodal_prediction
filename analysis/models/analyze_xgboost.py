@@ -43,39 +43,48 @@ def plot_conf_matrix(model, X_test, y_test, data_type):
 
 def plot_shap(model, X_train, X_test, data_type):
 
-    explainer = shap.TreeExplainer(model, X_train)
-    shap_values = explainer.shap_values(X_test)
+    X_test = X_test[model.feature_names_in_].copy()
+
+    explainer = shap.PermutationExplainer(
+        model.predict_proba,
+        X_test,
+        feature_names=X_test.columns,
+        max_evals=2 * X_test.shape[1] + 1
+    )
+
+    shap_values = explainer(X_test)
+
+    # # SHAP values for positive class
+    shap_pos = shap_values.values[:, :, 1]   # shape: (samples, features)
 
     # SHAP summary plot (beeswarm)
     plt.figure(figsize=(10, 7))
-    shap.summary_plot(shap_values, X_test, show=False)
+    shap.summary_plot(shap_pos, X_test, show=False)
     plt.title(f"SHAP Summary — {data_type}")
     plt.savefig(f"{output_dir}/shap_summary_{data_type}.png", dpi=300)
     plt.close()
 
     # SHAP bar plot
     plt.figure(figsize=(10, 7))
-    shap.summary_plot(shap_values, X_test, plot_type="bar", show=False)
+    shap.summary_plot(shap_pos, X_test, plot_type="bar", show=False)
     plt.title(f"SHAP Importance — {data_type}")
     plt.savefig(f"{output_dir}/shap_bar_{data_type}.png", dpi=300)
     plt.close()
 
     # SHAP dependence plots (top 5)
-    mean_abs = np.abs(shap_values).mean(axis=0)
+    mean_abs = np.abs(shap_pos).mean(axis=0)
     top5 = np.argsort(mean_abs)[::-1][:5]
 
     for i in top5:
         feat = X_test.columns[i]
         plt.figure(figsize=(8, 6))
-        shap.dependence_plot(feat, shap_values, X_test, show=False)
+        shap.dependence_plot(feat, shap_pos, X_test, show=False)
         plt.title(f"SHAP Dependence — {feat} ({data_type})")
         plt.tight_layout()
         plt.savefig(f"{output_dir}/shap_dependence_{data_type}_{feat}.png", dpi=300)
         plt.close()
 
-# --------------------------------------------------------------------
-# MAIN
-# --------------------------------------------------------------------
+
 for data_type, file in data_files.items():
 
     print(f"\n=== Analyzing {data_type} ===")

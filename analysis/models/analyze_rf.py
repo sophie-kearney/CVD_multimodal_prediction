@@ -1,9 +1,3 @@
-# model = joblib.load("rf_model_X_agg.joblib")
-# importance_df = pd.DataFrame({
-#     "feature": model.feature_names_in_,
-#     "importance": model.feature_importances_
-# }).sort_values(by="importance", ascending=False)
-
 import pandas as pd
 import joblib
 import shap
@@ -12,10 +6,6 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.model_selection import train_test_split
 import numpy as np
-
-# ----------------------------------------
-# Configuration
-# ----------------------------------------
 
 data_files = {
     "X_agg": "../../data/X_agg.csv",
@@ -28,10 +18,6 @@ model_template = "rf_model_{data_type}.joblib"
 
 output_dir = "model_analysis_plots"
 os.makedirs(output_dir, exist_ok=True)
-
-# ----------------------------------------
-# Helper plotting functions
-# ----------------------------------------
 
 def plot_feature_importance(model, feature_names, data_type):
     importances = model.feature_importances_
@@ -62,18 +48,22 @@ def plot_conf_matrix(model, X_test, y_test, data_type):
     plt.savefig(f"{output_dir}/confusion_matrix_{data_type}.png", dpi=300)
     plt.close()
 
-
 def compute_and_plot_shap(model, X_train, X_test, data_type):
-    # TreeExplainer is ideal for RandomForest
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_test)
+    X_test = X_test[model.feature_names_in_].copy()
 
-    # for binary classification: shap_values = [class0, class1]
-    shap_pos = shap_values[1]
+    explainer = shap.PermutationExplainer(
+        model.predict_proba,
+        X_test,
+        feature_names=X_test.columns,
+        max_evals=2 * X_test.shape[1] + 1
+    )
 
-    # -------------------------
+    shap_values = explainer(X_test)
+
+    # SHAP values for positive class
+    shap_pos = shap_values.values[:, :, 1]   # shape: (samples, features)
+
     # SHAP Summary Beewswarm
-    # -------------------------
     plt.figure(figsize=(10, 7))
     shap.summary_plot(shap_pos, X_test, show=False)
     plt.title(f"SHAP Summary Plot — {data_type}")
@@ -81,9 +71,7 @@ def compute_and_plot_shap(model, X_train, X_test, data_type):
     plt.savefig(f"{output_dir}/shap_summary_{data_type}.png", dpi=300)
     plt.close()
 
-    # -------------------------
     # SHAP Feature Importance (mean |SHAP|)
-    # -------------------------
     plt.figure(figsize=(10, 7))
     shap.summary_plot(shap_pos, X_test, plot_type="bar", show=False)
     plt.title(f"Mean |SHAP| Values — {data_type}")
@@ -91,25 +79,25 @@ def compute_and_plot_shap(model, X_train, X_test, data_type):
     plt.savefig(f"{output_dir}/shap_bar_{data_type}.png", dpi=300)
     plt.close()
 
-    # -------------------------
     # SHAP Dependence Plots (Top 5)
-    # -------------------------
     mean_abs_shap = np.abs(shap_pos).mean(axis=0)
     top_features = X_test.columns[np.argsort(mean_abs_shap)[::-1][:5]]
 
     for feat in top_features:
         plt.figure(figsize=(8, 6))
-        shap.dependence_plot(feat, shap_pos, X_test, show=False)
+        shap.dependence_plot(
+            feat,
+            shap_pos,
+            X_test,
+            show=False
+        )
         plt.title(f"SHAP Dependence — {feat} ({data_type})")
         plt.tight_layout()
         plt.savefig(f"{output_dir}/shap_dependence_{data_type}_{feat}.png", dpi=300)
         plt.close()
 
 
-# ----------------------------------------
-# Main Loop Over Data Types
-# ----------------------------------------
-
+# loop over data
 for data_type, file_path in data_files.items():
     print(f"\n=== Analyzing: {data_type} ===")
 
@@ -118,34 +106,30 @@ for data_type, file_path in data_files.items():
     X = df.drop(columns=["CVD", "PATIENT"])
     y = df["CVD"]
 
-    # Use same split as training!
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
-    )
-
     # Load model
     model_file = model_template.format(data_type=data_type)
     print(f"→ Loading model {model_file}")
     model = joblib.load(model_file)
 
-    # ---------------------------
-    # 1. Feature importance plot
-    # ---------------------------
+    X = X[model.feature_names_in_]
+
+    # Use same split as training!
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, stratify=y, random_state=42
+    )
+
+    # feature importance plot
     print("→ Plotting feature importance...")
     plot_feature_importance(model, X.columns, data_type)
 
-    # ---------------------------
-    # 2. Confusion matrix
-    # ---------------------------
-    print("→ Plotting confusion matrix...")
+    # confusion matrix
+    print("plotting confusion matrix...")
     plot_conf_matrix(model, X_test, y_test, data_type)
 
-    # ---------------------------
     # 3. SHAP values
-    # ---------------------------
-    print("→ Computing SHAP values...")
+    print("computing SHAP values...")
     compute_and_plot_shap(model, X_train, X_test, data_type)
 
-    print(f"✓ Completed {data_type}\n")
+    print(f"completed {data_type}\n")
 
-print(f"All results saved in: {output_dir}/")
+print(f"all results saved in: {output_dir}/")
